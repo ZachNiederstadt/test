@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced 3D Particle Cloud</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #resetButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background-color: #444;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <div id="controls">
+        <label for="particleCount">Particle Count: </label>
+        <input type="range" id="particleCount" min="10" max="2000" value="500"><br>
+        <label for="rotationSpeed">Rotation Speed: </label>
+        <input type="range" id="rotationSpeed" min="0" max="0.05" step="0.001" value="0.02">
+        <label for="Opacity">Opacity: </label>
+        <input type="range" id="Opacity" min="20" max="100" value="70">
+    </div>
+    <button id="resetButton">Reset</button>
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let rotationSpeed = 0.02;
+        let mouseX = 0, mouseY = 0;
+        let isMouseDown = false;
+        let zoom = 1;
+        let spread = 1;
+
+        class Vector3 {
+            constructor(x, y, z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+
+            rotate(axis, angle) {
+                const rotationMatrix = [
+                    [Math.cos(angle) + axis.x * axis.x * (1 - Math.cos(angle)),
+                     axis.x * axis.y * (1 - Math.cos(angle)) - axis.z * Math.sin(angle),
+                     axis.x * axis.z * (1 - Math.cos(angle)) + axis.y * Math.sin(angle)],
+                    [axis.y * axis.x * (1 - Math.cos(angle)) + axis.z * Math.sin(angle),
+                     Math.cos(angle) + axis.y * axis.y * (1 - Math.cos(angle)),
+                     axis.y * axis.z * (1 - Math.cos(angle)) - axis.x * Math.sin(angle)],
+                    [axis.z * axis.x * (1 - Math.cos(angle)) - axis.y * Math.sin(angle),
+                     axis.z * axis.y * (1 - Math.cos(angle)) + axis.x * Math.sin(angle),
+                     Math.cos(angle) + axis.z * axis.z * (1 - Math.cos(angle))]
+                ];
+
+                const x = this.x * rotationMatrix[0][0] + this.y * rotationMatrix[0][1] + this.z * rotationMatrix[0][2];
+                const y = this.x * rotationMatrix[1][0] + this.y * rotationMatrix[1][1] + this.z * rotationMatrix[1][2];
+                const z = this.x * rotationMatrix[2][0] + this.y * rotationMatrix[2][1] + this.z * rotationMatrix[2][2];
+
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+        }
+
+        class Particle {
+            constructor(position) {
+                this.position = position;
+                this.originalPosition = new Vector3(position.x, position.y, position.z);
+                this.size = Math.random() * 2 + 1;
+                this.color = this.randomColor();
+                this.rotationAxis = new Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+            }
+
+            randomColor() {
+                const hue = Math.random() * 360;
+                // Exclude pinks (300-360, 0-30), greens (90-150), and yellows (50-70)
+                if ((hue > 300 || hue < 30) || (hue > 90 && hue < 150) || (hue > 50 && hue < 70)) {
+                    return this.randomColor(); // Recursively try again
+                }
+                return `hsla(${hue}, 100%, 50%, 0.25)`; // 50% opacity
+            }
+
+            rotate(angle) {
+                this.position.rotate(this.rotationAxis, angle);
+            }
+
+            draw() {
+                const scale = 400 * zoom / (400 + this.position.z * spread);
+                const x2d = this.position.x * scale * spread + canvas.width / 2;
+                const y2d = this.position.y * scale * spread + canvas.height / 2;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(x2d, y2d, this.size * scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            reset() {
+                this.position = new Vector3(this.originalPosition.x, this.originalPosition.y, this.originalPosition.z);
+            }
+        }
+
+        function createParticles(count) {
+            particles = [];
+            for (let i = 0; i < count; i++) {
+                let position;
+                if (count <= 1000) {
+                    position = new Vector3(
+                        Math.random() * 200 - 100,
+                        Math.random() * 200 - 100,
+                        Math.random() * 200 - 100
+                    );
+                } else {
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(Math.random() * 2 - 1);
+                    const r = Math.pow(Math.random(), 1/3) * 100;
+                    position = new Vector3(
+                        r * Math.sin(phi) * Math.cos(theta),
+                        r * Math.sin(phi) * Math.sin(theta),
+                        r * Math.cos(phi)
+                    );
+                }
+                particles.push(new Particle(position));
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (isMouseDown) {
+                const dx = mouseX - canvas.width / 2;
+                const dy = mouseY - canvas.height / 2;
+                const angle = Math.atan2(dy, dx) * 0.05;
+                particles.forEach(p => p.rotate(angle));
+            } else {
+                particles.forEach(p => p.rotate(rotationSpeed));
+            }
+            
+            particles.sort((a, b) => b.position.z - a.position.z);
+            particles.forEach(p => p.draw());
+            
+            requestAnimationFrame(animate);
+        }
+
+        function reset() {
+            zoom = 1;
+            spread = 1;
+            particles.forEach(p => p.reset());
+        }
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isMouseDown) {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.shiftKey) {
+                spread *= (e.deltaY > 0) ? 0.95 : 1.05;
+                spread = Math.max(0.1, Math.min(spread, 5));
+            } else {
+                zoom *= (e.deltaY > 0) ? 0.9 : 1.1;
+                zoom = Math.max(0.1, Math.min(zoom, 10));
+            }
+        });
+
+        document.getElementById('particleCount').addEventListener('input', function() {
+            createParticles(parseInt(this.value));
+        });
+
+        document.getElementById('rotationSpeed').addEventListener('input', function() {
+            rotationSpeed = parseFloat(this.value);
+        });
+
+        document.getElementById('resetButton').addEventListener('click', reset);
+
+        createParticles(500);
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        animate();
+    </script>
+</body>
+</html>

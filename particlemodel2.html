@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Model with Opacity Variation</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <div id="controls">
+        Particle Count: <input type="range" id="particleCount" min="1" max="1000" value="100"><br>
+        Rotation Speed: <input type="range" id="rotationSpeed" min="0" max="10" step="0.1" value="1"><br>
+        Base Opacity: <input type="range" id="baseOpacity" min="0" max="1" step="0.01" value="0.7"><br>
+        Particle Size: <input type="range" id="particleSize" min="1" max="10" step="0.1" value="2"><br>
+        <button onclick="reset()">Reset</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        const particles = [];
+
+        let particleCount = 100;
+        let rotationSpeed = 1;
+        let baseOpacity = 0.7;
+        let particleSize = 2;
+
+        const colors = [
+            '#330011', '#660022', '#990033', // Very dark reds
+            '#000033', '#000066', '#000099', // Very dark blues
+            '#330033', '#660066'  // Very dark purples
+        ];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function createParticle() {
+            return {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: (Math.random() * 2 + 0.5) * particleSize,
+                speedX: (Math.random() - 0.5) * 2,
+                speedY: (Math.random() - 0.5) * 2,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                opacity: baseOpacity * (0.5 + Math.random() * 0.5) // Vary opacity
+            };
+        }
+
+        function updateParticles() {
+            for (let p of particles) {
+                p.x += p.speedX * rotationSpeed;
+                p.y += p.speedY * rotationSpeed;
+
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.y > canvas.height) p.y = 0;
+            }
+        }
+
+        function drawParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let p of particles) {
+                ctx.globalAlpha = p.opacity;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1; // Reset global alpha
+        }
+
+        function animate() {
+            updateParticles();
+            drawParticles();
+            requestAnimationFrame(animate);
+        }
+
+        function initParticles() {
+            particles.length = 0;
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(createParticle());
+            }
+        }
+
+        function reset() {
+            particleCount = 100;
+            rotationSpeed = 1;
+            baseOpacity = 0.7;
+            particleSize = 2;
+            document.getElementById('particleCount').value = particleCount;
+            document.getElementById('rotationSpeed').value = rotationSpeed;
+            document.getElementById('baseOpacity').value = baseOpacity;
+            document.getElementById('particleSize').value = particleSize;
+            initParticles();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        document.getElementById('particleCount').addEventListener('input', function() {
+            particleCount = parseInt(this.value);
+            initParticles();
+        });
+        document.getElementById('rotationSpeed').addEventListener('input', function() {
+            rotationSpeed = parseFloat(this.value);
+        });
+        document.getElementById('baseOpacity').addEventListener('input', function() {
+            baseOpacity = parseFloat(this.value);
+            initParticles(); // Reinitialize particles to apply new base opacity
+        });
+        document.getElementById('particleSize').addEventListener('input', function() {
+            particleSize = parseFloat(this.value);
+            initParticles(); // Reinitialize particles to apply new size
+        });
+
+        resizeCanvas();
+        initParticles();
+        animate();
+    </script>\
+</body>
+</html>
+

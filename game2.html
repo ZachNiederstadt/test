@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Racing Game</title>
+    <style>
+        @font-face {
+            font-family: 'Arcade';
+            src: url('https://fonts.cdnfonts.com/css/arcade-classic') format('woff');
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #222;
+            font-family: 'Arcade', sans-serif;
+        }
+        #gameContainer {
+            border: 10px solid #444;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        #canvas {
+            background-color: #000;
+        }
+        #restartButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Arcade', sans-serif;
+        }
+        #difficultyContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+        }
+        #difficultySlider {
+            width: 100px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas" width="400" height="600"></canvas>
+        <button id="restartButton">Restart</button>
+        <div id="difficultyContainer">
+            <label for="difficultySlider">Difficulty:</label>
+            <input type="range" id="difficultySlider" min="1" max="10" value="5">
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const restartButton = document.getElementById('restartButton');
+        const difficultySlider = document.getElementById('difficultySlider');
+
+        const ROAD_WIDTH = 300;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 60;
+        const CAR_WIDTH = 40;
+        const CAR_HEIGHT = 60;
+        const HAZARD_WIDTH = 30;
+        const HAZARD_HEIGHT = 30;
+        const LANE_COUNT = 3;
+        const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
+
+        let player, hazards, cars, score, gameOver, gameStartTime, difficulty;
+        let roadOffset = 0;
+
+        function initGame() {
+            player = {
+                x: canvas.width / 2 - PLAYER_WIDTH / 2,
+                y: canvas.height - PLAYER_HEIGHT - 20,
+                speed: 5
+            };
+            hazards = [];
+            cars = [];
+            score = 0;
+            gameOver = false;
+            gameStartTime = Date.now();
+            difficulty = 1;
+        }
+
+        function drawRoad() {
+            // Main road
+            ctx.fillStyle = '#333';
+            ctx.fillRect((canvas.width - ROAD_WIDTH) / 2, 0, ROAD_WIDTH, canvas.height);
+            
+            // Lane markers
+            ctx.strokeStyle = '#fff';
+            ctx.setLineDash([20, 20]);
+            for (let i = 1; i < LANE_COUNT; i++) {
+                const x = (canvas.width - ROAD_WIDTH) / 2 + i * LANE_WIDTH;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Racing curbs
+            const curbWidth = 30;
+            const curbHeight = 50;
+            ctx.fillStyle = '#f00';
+            for (let y = roadOffset % (curbHeight * 2); y < canvas.height; y += curbHeight * 2) {
+                ctx.fillRect((canvas.width - ROAD_WIDTH) / 2 - curbWidth, y, curbWidth, curbHeight);
+                ctx.fillRect((canvas.width + ROAD_WIDTH) / 2, y, curbWidth, curbHeight);
+            }
+            ctx.fillStyle = '#fff';
+            for (let y = roadOffset % (curbHeight * 2) + curbHeight; y < canvas.height; y += curbHeight * 2) {
+                ctx.fillRect((canvas.width - ROAD_WIDTH) / 2 - curbWidth, y, curbWidth, curbHeight);
+                ctx.fillRect((canvas.width + ROAD_WIDTH) / 2, y, curbWidth, curbHeight);
+            }
+        }
+
+        function drawSprite(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+            // You can replace this with an image drawing operation:
+            // ctx.drawImage(spriteImage, x, y, width, height);
+        }
+
+        function drawPlayer() {
+            drawSprite(player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT, '#0f0');
+        }
+
+        function drawObjects() {
+            hazards.forEach(hazard => {
+                drawSprite(hazard.x, hazard.y, HAZARD_WIDTH, HAZARD_HEIGHT, '#f00');
+            });
+            cars.forEach(car => {
+                drawSprite(car.x, car.y, CAR_WIDTH, CAR_HEIGHT, '#00f');
+            });
+        }
+
+        function moveObjects() {
+            const baseSpeed = 1; // Reduced base speed
+            const userDifficulty = (difficultySlider.value / 10) * .01; // Further reduced effect of difficulty slider
+            
+            roadOffset += baseSpeed * userDifficulty * difficulty;
+
+            hazards.forEach(hazard => {
+                hazard.y += baseSpeed * userDifficulty * difficulty;
+            });
+            cars.forEach(car => {
+                car.y += car.speed * userDifficulty * difficulty;
+            });
+
+            hazards = hazards.filter(hazard => hazard.y < canvas.height);
+            cars = cars.filter(car => car.y < canvas.height);
+
+            const elapsedTime = (Date.now() - gameStartTime) / 1000;
+            const spawnRate = 0.01 + (elapsedTime / 3000) * 0.01; // Much slower increase in spawn rate
+            
+            if (Math.random() < spawnRate * userDifficulty * difficulty) {
+                spawnObject();
+            }
+        }
+
+        function spawnObject() {
+            const laneIndex = Math.floor(Math.random() * LANE_COUNT);
+            const isHazard = Math.random() < 0.4; // 40% chance of hazard, 60% chance of car
+
+            if (isHazard) {
+                const x = (canvas.width - ROAD_WIDTH) / 2 + laneIndex * LANE_WIDTH + (LANE_WIDTH - HAZARD_WIDTH) / 2;
+                if (!checkOverlap(x, -HAZARD_HEIGHT, HAZARD_WIDTH, HAZARD_HEIGHT, hazards)) {
+                    hazards.push({ x, y: -HAZARD_HEIGHT });
+                }
+            } else {
+                const x = (canvas.width - ROAD_WIDTH) / 2 + laneIndex * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+                if (!checkOverlap(x, -CAR_HEIGHT, CAR_WIDTH, CAR_HEIGHT, cars)) {
+                    cars.push({ x, y: -CAR_HEIGHT, speed: Math.random() * 1 + 0.5 }); // Slower speed between 0.5 and 1.5
+                }
+            }
+        }
+
+        function checkOverlap(x, y, width, height, objects) {
+            return objects.some(obj => 
+                x < obj.x + (obj.width || width) &&
+                x + width > obj.x &&
+                y < obj.y + (obj.height || height) &&
+                y + height > obj.y
+            );
+        }
+
+        function checkCollision() {
+            const roadLeft = (canvas.width - ROAD_WIDTH) / 2;
+            const roadRight = roadLeft + ROAD_WIDTH;
+
+            if (player.x < roadLeft || player.x + PLAYER_WIDTH > roadRight) {
+                gameOver = true;
+            }
+
+            [...hazards, ...cars].forEach(object => {
+                if (
+                    player.x < object.x + (object.width || CAR_WIDTH) &&
+                    player.x + PLAYER_WIDTH > object.x &&
+                    player.y < object.y + (object.height || CAR_HEIGHT) &&
+                    player.y + PLAYER_HEIGHT > object.y
+                ) {
+                    gameOver = true;
+                }
+            });
+        }
+
+        function updateScore() {
+            [...hazards, ...cars].forEach(object => {
+                if (object.y > player.y && !object.passed) {
+                    score++;
+                    object.passed = true;
+                }
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arcade';
+            ctx.textAlign = 'right';
+            ctx.fillText(`Score: ${score}`, canvas.width - 10, canvas.height - 10);
+        }
+
+        function increaseDifficulty() {
+            const elapsedTime = (Date.now() - gameStartTime) / 1000;
+            difficulty = 1 + Math.floor(elapsedTime / 600) * 0.1; // Difficulty increases every 10 minutes instead of every minute
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawRoad();
+            drawPlayer();
+            drawObjects();
+            drawScore();
+
+            if (!gameOver) {
+                moveObjects();
+                checkCollision();
+                updateScore();
+                increaseDifficulty();
+                requestAnimationFrame(gameLoop);
+            } else {
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arcade';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
+                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 40);
+                restartButton.style.display = 'block';
+            }
+        }
+
+        let keys = {};
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        function handleInput() {
+            if ((keys['ArrowLeft'] || keys['a']) && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if ((keys['ArrowRight'] || keys['d']) && player.x < canvas.width - PLAYER_WIDTH) {
+                player.x += player.speed;
+            }
+        }
+
+        function updateGame() {
+            handleInput();
+            gameLoop();
+            if (!gameOver) {
+                requestAnimationFrame(updateGame);
+            }
+        }
+
+        restartButton.addEventListener('click', () => {
+            initGame();
+            restartButton.style.display = 'none';
+            updateGame();
+        });
+
+        initGame();
+        updateGame();
+    </script>
+</body>
+</html>
